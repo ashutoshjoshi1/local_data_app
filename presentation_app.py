@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, render_template_string, request, Response
+from flask import Flask, jsonify, render_template_string, request, Response, redirect, url_for
 import os, re, requests
 from datetime import datetime, timedelta
 from google.cloud import storage
@@ -55,7 +55,6 @@ def get_status(pandora):
         return ("yellow", "Check the device in teamviewer. There might be some error.")
     else:
         return ("red", "Please check the device ASAP. It is now generating L0 files. Maybe the application is stopped.")
-
 
 # -------------------------------
 # HTML Template for the view route
@@ -169,7 +168,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 "Heavy snow": "❄️",
                 "Thunderstorm": "⛈️"
               };
-              // Create legend (only once)
               function createLegend() {
                 const legendContainer = document.getElementById("weather-legend");
                 legendContainer.innerHTML = "";
@@ -351,14 +349,11 @@ def home():
         pandora = request.form.get('pandora_number')
         if not pandora or not re.match(r'^\d{3}$', pandora):
             return "Invalid Pandora number. Please enter a 3-digit number.", 400
-        # Get device status (color and message) from status.txt in the bucket
-        status_color, status_message = get_status(pandora)
         return render_template_string(HTML_TEMPLATE,
                                       pandora_number=pandora,
                                       folder=request.form.get('folder'),
                                       location=request.form.get('location'),
-                                      status_color=status_color,
-                                      status_message=status_message)
+                                      **dict(zip(["status_color", "status_message"], get_status(pandora))))
     return """
 <!DOCTYPE html>
 <html lang="en">
@@ -416,6 +411,13 @@ def home():
 </body>
 </html>
     """
+
+# -------------------------------
+# Optional: Allow GET on /view to redirect to home
+# -------------------------------
+@app.route('/view', methods=['GET'])
+def view_get():
+    return redirect(url_for('home'))
 
 if __name__ == '__main__':
     app.run(debug=True)
