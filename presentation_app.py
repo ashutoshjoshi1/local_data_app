@@ -221,8 +221,9 @@ def get_files_from_gcp(pandora, folder):
     """
     Lists image files from the GCP bucket under the given pandora and folder.
     It groups the images by date extracted from the filename.
+    Note: We prepend 'Pan' to the pandora number to match the bucket structure.
     """
-    prefix = f"{pandora}/{folder}/"
+    prefix = f"Pan{pandora}/{folder}/"
     blobs = bucket.list_blobs(prefix=prefix)
     files_by_date = {}
     for blob in blobs:
@@ -241,6 +242,7 @@ def get_files_from_gcp(pandora, folder):
                     print(f"Error parsing date from filename {filename}: {e}")
     return files_by_date
 
+
 # -------------------------------
 # Endpoint to get files grouped by date from GCP bucket
 # -------------------------------
@@ -256,8 +258,9 @@ def get_files(pandora, folder):
 def serve_file(pandora, folder, filename):
     """
     Serves an image file from the GCP bucket.
+    Note: The blob name is constructed using the 'Pan' prefix.
     """
-    blob_name = f"{pandora}/{folder}/{filename}"
+    blob_name = f"Pan{pandora}/{folder}/{filename}"
     blob = bucket.blob(blob_name)
     try:
         image_data = blob.download_as_bytes()
