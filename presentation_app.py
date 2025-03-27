@@ -280,12 +280,17 @@ def get_weather_data(date):
     if not location_input:
         return jsonify({"error": "Location not provided"}), 400
     try:
+        # Parse the provided date and subtract one day
         original_date = datetime.strptime(date, "%Y-%m-%d")
-        date_str = original_date.strftime("%Y-%m-%d")
-        url = f"https://api.weatherapi.com/v1/history.json?key={API_KEY}&q={location_input}&dt={date_str}"
+        previous_date = original_date - timedelta(days=1)
+        previous_date_str = previous_date.strftime("%Y-%m-%d")
+        
+        # Fetch weather data for the previous day
+        url = f"https://api.weatherapi.com/v1/history.json?key={API_KEY}&q={location_input}&dt={previous_date_str}"
         response = requests.get(url)
         if response.status_code != 200:
             return jsonify({"error": f"Failed to fetch weather data: {response.text}"}), 500
+        
         data = response.json()
         weather_data = []
         for hour in data.get('forecast', {}).get('forecastday', [{}])[0].get('hour', []):
@@ -297,6 +302,7 @@ def get_weather_data(date):
     except Exception as e:
         print(f"Error fetching weather data: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 # -------------------------------
 # Home route (with form) and view route
