@@ -10,7 +10,7 @@ API_KEY = "5ae04d623af44c5fa48154438251102"
 # Google Cloud Storage Setup
 # -------------------------------
 # Update with your GCP credentials JSON file path and bucket name
-GCP_CREDENTIALS_PATH = "path/to/credentials.json"
+GCP_CREDENTIALS_PATH = "ornate-course-442519-s9-29052f520c7f.json"
 BUCKET_NAME = "all-charts"
 storage_client = storage.Client.from_service_account_json(GCP_CREDENTIALS_PATH)
 bucket = storage_client.bucket(BUCKET_NAME)
