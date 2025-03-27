@@ -19,13 +19,13 @@ bucket = storage_client.bucket(BUCKET_NAME)
 # -------------------------------
 def get_status(pandora):
     """Fetch the status.txt from the bucket under Pan{pandora}/status.txt and extract the date.
-    The expected file content is like:
+    Expected content example:
       Pandora2s1_GreenbeltMD_20250327_L0_part50.txt
-    If the file is not present, returns ('grey', 'Not Sure').
-    Otherwise, it determines the status based on the extracted date:
-      - Green: if the extracted date is today or yesterday.
-      - Yellow: if the extracted date is within the last 7 days.
-      - Red: if the extracted date is older than 7 days.
+    If the file is not present or cannot be parsed, returns ('grey', 'Not Sure').
+    Otherwise, based on the extracted date:
+      - Green: if the date is today or yesterday.
+      - Yellow: if the date is within the last 7 days.
+      - Red: if the date is older than 7 days.
     """
     blob_name = f"Pan{pandora}/status.txt"
     blob = bucket.blob(blob_name)
@@ -35,7 +35,7 @@ def get_status(pandora):
         print(f"Error reading status.txt: {e}")
         return ("grey", "Not Sure")
     
-    # Extract date from a line like: Pandora2s1_GreenbeltMD_20250327_L0_part50.txt
+    # Extract date using pattern: _YYYYMMDD_
     match = re.search(r"_(\d{8})_", status_line)
     if match:
         date_str = match.group(1)
@@ -263,9 +263,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 # -------------------------------
 def get_files_from_gcp(pandora, folder):
     """
-    Lists image files from the GCP bucket under the given pandora and folder.
-    It groups the images by date extracted from the filename.
-    Note: We prepend 'Pan' to the pandora number to match the bucket structure.
+    Lists image files from the GCP bucket under Pan{pandora}/{folder}/.
+    It groups the images by date extracted from the filename (using pattern _YYYYMMDDT).
     """
     prefix = f"Pan{pandora}/{folder}/"
     blobs = bucket.list_blobs(prefix=prefix)
@@ -300,7 +299,7 @@ def get_files(pandora, folder):
 def serve_file(pandora, folder, filename):
     """
     Serves an image file from the GCP bucket.
-    Note: The blob name is constructed using the 'Pan' prefix.
+    Blob name is constructed as Pan{pandora}/{folder}/{filename}.
     """
     blob_name = f"Pan{pandora}/{folder}/{filename}"
     blob = bucket.blob(blob_name)
@@ -393,7 +392,8 @@ def home():
     <div style="text-align: center; margin-bottom: 380px;">
       <img src="static/asset/sciglob.png" style="max-width: 1200px; height: auto;">
     </div>
-   <form action="/view" method="post" style="font-size: 28px;"> 
+   <!-- Changed form action from /view to / -->
+   <form action="/" method="post" style="font-size: 28px;"> 
     <label for="pandora_number">Enter Pandora Number (3 digits):</label><br>
     <input type="text" id="pandora_number" name="pandora_number" placeholder="e.g., 123" required pattern="\\d{3}" style="font-size: 28px;"><br><br>
     <label for="location">Enter Location:</label><br>
