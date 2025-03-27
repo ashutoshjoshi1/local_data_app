@@ -60,22 +60,22 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   </div>
   <script>
     let allImages = [];
-    // Fetch files first then fetch weather data
+    // Fetch files, then for each date (container) add images and its weather chart
     fetch('/get-files/{{ pandora_number }}/{{ folder }}')
       .then(res => res.json())
       .then(data => {
         const content = document.getElementById('content');
-        // Get the latest 10 dates (containers)
+        // Sort and select latest 10 dates
         const sortedDates = Object.keys(data.files)
                               .sort((a, b) => new Date(b) - new Date(a))
                               .slice(0, 10);
         sortedDates.forEach(date => {
-          // Use the same date for the container and weather chart.
+          // Format the date for display
           const formattedDate = new Date(date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+          // Create container for the date
           const dateContainer = document.createElement('div');
           dateContainer.className = 'date-container';
           dateContainer.innerHTML = `<h2>Date: ${formattedDate}</h2>`;
-          
           // Create and append the image container
           const imageContainer = document.createElement('div');
           imageContainer.className = 'image-container';
@@ -88,22 +88,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             imageContainer.appendChild(image);
           });
           dateContainer.appendChild(imageContainer);
-          content.appendChild(dateContainer);
-        });
-        // Once all image containers are created, then fetch weather data for each container
-        sortedDates.forEach(date => {
+          // Create chart div and append to the same container
           const chartDiv = document.createElement('div');
           chartDiv.id = `chart-${date}`;
-          // Append the chart div to the corresponding date container (find by header text)
-          const dateContainers = Array.from(document.getElementsByClassName('date-container'));
-          const targetContainer = dateContainers.find(container => container.innerHTML.includes(date));
-          // If not found by header, append at the end of the container for that date.
-          // Here, for simplicity, we append to the container that has the matching formatted date.
-          // (Since date string in header is formatted differently, we use a closure variable.)
-          // Append the chart div at the end of the document (or adjust as needed)
-          document.getElementById('content').appendChild(chartDiv);
+          dateContainer.appendChild(chartDiv);
+          content.appendChild(dateContainer);
           
-          // Use the same date for weather fetch
+          // Fetch weather data for this date and render chart in chartDiv
           fetch(`/get-weather-data/${date}?location={{ location }}`)
             .then(response => response.json())
             .then(weatherData => {
@@ -158,7 +149,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 document.body.appendChild(weatherLegend);
                 createLegend();
               }
-              // Map conditions to emojis (or return the condition if not found)
+              // Map conditions to emojis (or fallback to condition text)
               const conditionsWithIcons = conditions.map(cond => {
                 let trimmed = cond.trim();
                 return weatherIcons[trimmed] || trimmed;
@@ -174,7 +165,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 marker: { size: 0 }
               }];
               const layout = {
-                title: { text: `Weather Conditions on ${new Date(date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`, font: { color: 'white' } },
+                title: { text: `Weather Conditions on ${formattedDate}`, font: { color: 'white' } },
                 xaxis: { title: 'Time', tickangle: -45, color: 'white', gridcolor: '#444' },
                 yaxis: { title: 'Condition', type: 'category', color: 'white', gridcolor: '#444' },
                 showlegend: false,
@@ -188,6 +179,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         });
       })
       .catch(error => console.error("Error fetching files:", error));
+      
     // Image zoom functionality
     let currentIndex = 0;
     function zoomImage(index) {
@@ -224,7 +216,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     });
   </script>
 </body>
-</html>"""
+</html>
+"""
 
 # -------------------------------
 # Helper function to list files from GCP bucket
@@ -247,7 +240,6 @@ def get_files_from_gcp(pandora, folder):
                 try:
                     date_obj = datetime.strptime(date_str, "%Y%m%d")
                     date_formatted = date_obj.strftime("%Y-%m-%d")
-                    # Use the /files route to serve the image via this app.
                     file_url = f"/files/{pandora}/{folder}/{filename}"
                     files_by_date.setdefault(date_formatted, []).append(file_url)
                 except Exception as e:
