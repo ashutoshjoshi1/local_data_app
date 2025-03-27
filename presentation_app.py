@@ -1,10 +1,23 @@
-from flask import Flask, jsonify, render_template_string, request, send_from_directory
+from flask import Flask, jsonify, render_template_string, request, Response
 import os, re, requests
 from datetime import datetime, timedelta
+from google.cloud import storage
 
 app = Flask(__name__)
 API_KEY = "5ae04d623af44c5fa48154438251102"
 
+# -------------------------------
+# Google Cloud Storage Setup
+# -------------------------------
+# Update with your GCP credentials JSON file path and bucket name
+GCP_CREDENTIALS_PATH = "path/to/credentials.json"
+BUCKET_NAME = "all-charts"
+storage_client = storage.Client.from_service_account_json(GCP_CREDENTIALS_PATH)
+bucket = storage_client.bucket(BUCKET_NAME)
+
+# -------------------------------
+# HTML Template for the view route
+# -------------------------------
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -201,221 +214,69 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </body>
 </html>"""
 
-
-@app.route('/', methods=['GET', 'POST'])
-def home():
-    if request.method == 'POST':
-        pandora_number = request.form.get('pandora_number')
-        if not pandora_number or not re.match(r'^\d{3}$', pandora_number):
-            return "Invalid Pandora number. Please enter a 3-digit number.", 400
-        return render_template_string(HTML_TEMPLATE, pandora_number=pandora_number)
-   
-    return """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SciGlob NOps app</title>
-  <style>
-    /* Reset some default browser styles */
-    *, *::before, *::after {
-      box-sizing: border-box;
-    }
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-    }
-    body {
-      background-color: #000;
-      overflow: hidden;
-      font-family: sans-serif;
-    }
-    /* Container to center everything */
-    .container {
-      position: relative;
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-    }
-    /* Animated background lights */
-    .background-light {
-      position: absolute;
-      width: 400px;
-      height: 400px;
-      opacity: 0.3;
-      filter: blur(120px);
-    }
-    .light1 {
-      background: #A855F7;
-      animation: moveLight 8s infinite alternate ease-in-out;
-      left: 0;
-      top: 0;
-    }
-    .light2 {
-      background: #F472B6;
-      animation: moveLight2 10s infinite alternate ease-in-out;
-      right: 0;
-      bottom: 0;
-    }
-    @keyframes moveLight {
-      0%, 100% {
-        transform: translate(-50%, -50%);
-      }
-      50% {
-        transform: translate(50%, 50%);
-      }
-    }
-    @keyframes moveLight2 {
-      0%, 100% {
-        transform: translate(50%, 50%);
-      }
-      50% {
-        transform: translate(-50%, -50%);
-      }
-    }
-    /* Frosted glass input field styles */
-    .input-field {
-      position: relative;
-      width: 320px;
-      padding: 12px 16px;
-      font-size: 16px;
-      color: #fff;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 8px;
-      backdrop-filter: blur(10px);
-      outline: none;
-      transition: transform 0.3s ease-out;
-      margin-bottom: 10px;
-    }
-    /* Frosted glass button styles */
-    .submit-button {
-      padding: 10px 20px;
-      font-size: 16px;
-      color: #fff;
-      background: rgba(255, 255, 255, 0.2);
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      border-radius: 8px;
-      backdrop-filter: blur(10px);
-      cursor: pointer;
-      transition: background 0.3s ease-out;
-    }
-    .submit-button:hover {
-      background: rgba(255, 255, 255, 0.3);
-    }
-    /* When focused (after animation) */
-    .focused {
-      transform: translateY(-12px);
-    }
-    /* Animation for the initial focus effect */
-    .animate-rise {
-      animation: rise 0.5s ease-out forwards;
-    }
-    @keyframes rise {
-      0% {
-        transform: translateY(0);
-      }
-      40% {
-        transform: translateY(-16px);
-      }
-      100% {
-        transform: translateY(-12px);
-      }
-    }
-    /* Placeholder style */
-    ::placeholder {
-      color: #ccc;
-    }
-    label {
-            color: white;
-        }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="background-light light1"></div>
-    <div class="background-light light2"></div>
-
-    <div style="text-align: center; margin-bottom: 380px;">
-      <img src="static/asset/sciglob.png" style="max-width: 1200px; height: auto;">
-    </div>
-    
-   <form action="/view" method="post" style="font-size: 28px;"> 
-    <label for="pandora_number">Enter Pandora Number (3 digits):</label><br>
-    <input type="text" id="pandora_number" name="pandora_number" placeholder="e.g., 123" required pattern="\d{3}" style="font-size: 28px;"><br><br>
-
-    <label for="location">Enter Location:</label><br>
-    <input type="text" id="location" name="location" placeholder="e.g., City, Country" required style="font-size: 28px;"><br><br>
-
-    <button type="submit" name="folder" value="diagnostic" style="font-size: 28px;">View Diagnostics</button>
-    <button type="submit" name="folder" value="figures" style="font-size: 28px;">View Figures</button>
-</form>
-  </div>
-  <script>
-    const input = document.getElementById("glassInput");
-    input.addEventListener("focus", function () {
-      input.classList.add("animate-rise");
-    });
-    input.addEventListener("animationend", function (e) {
-      if (e.animationName === "rise") {
-        input.classList.remove("animate-rise");
-        input.classList.add("focused");
-      }
-    });
-    input.addEventListener("blur", function () {
-      input.classList.remove("focused");
-    });
-  </script>
-</body>
-</html>
+# -------------------------------
+# Helper function to list files from GCP bucket
+# -------------------------------
+def get_files_from_gcp(pandora, folder):
     """
+    Lists image files from the GCP bucket under the given pandora and folder.
+    It groups the images by date extracted from the filename.
+    """
+    prefix = f"{pandora}/{folder}/"
+    blobs = bucket.list_blobs(prefix=prefix)
+    files_by_date = {}
+    for blob in blobs:
+        filename = os.path.basename(blob.name)
+        if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+            match = re.search(r"_(\d{8})T", filename)
+            if match:
+                date_str = match.group(1)
+                try:
+                    date_obj = datetime.strptime(date_str, "%Y%m%d")
+                    date_formatted = date_obj.strftime("%Y-%m-%d")
+                    # Use the /files route to serve the image via this app.
+                    file_url = f"/files/{pandora}/{folder}/{filename}"
+                    files_by_date.setdefault(date_formatted, []).append(file_url)
+                except Exception as e:
+                    print(f"Error parsing date from filename {filename}: {e}")
+    return files_by_date
 
-@app.route('/view', methods=['POST'])
-def view():
-    pandora = request.form['pandora_number'] #Corrected line
-    folder = request.form['folder']
-    location = request.form['location']
-    return render_template_string(HTML_TEMPLATE, pandora_number=pandora, folder=folder, location=location)
-
+# -------------------------------
+# Endpoint to get files grouped by date from GCP bucket
+# -------------------------------
 @app.route('/get-files/<pandora>/<folder>')
 def get_files(pandora, folder):
-    path = os.path.join(pandora, folder)
-    files_by_date = {}
-    if not os.path.isdir(path):
-        return jsonify({"files": files_by_date})
-    for fname in os.listdir(path):
-        match = re.search(r"_(\d{8})T", fname)
-        if match:
-            date_str = match.group(1)
-            try:
-                date_obj = datetime.strptime(date_str, "%Y%m%d")
-                date_formatted = date_obj.strftime("%Y-%m-%d")
-                file_url = f"/files/{pandora}/{folder}/{fname}"
-                files_by_date.setdefault(date_formatted, []).append(file_url)
-            except Exception as e:
-                print(f"Error parsing date from filename {fname}: {e}")
+    files_by_date = get_files_from_gcp(pandora, folder)
     return jsonify({"files": files_by_date})
 
+# -------------------------------
+# Endpoint to serve a file from the GCP bucket
+# -------------------------------
 @app.route('/files/<pandora>/<folder>/<filename>')
 def serve_file(pandora, folder, filename):
-    return send_from_directory(os.path.join(pandora, folder), filename)
+    """
+    Serves an image file from the GCP bucket.
+    """
+    blob_name = f"{pandora}/{folder}/{filename}"
+    blob = bucket.blob(blob_name)
+    try:
+        image_data = blob.download_as_bytes()
+    except Exception as e:
+        return f"Error: {e}", 404
+    return Response(image_data, mimetype=blob.content_type or 'application/octet-stream')
 
+# -------------------------------
+# Endpoint to fetch weather data using WeatherAPI
+# -------------------------------
 @app.route('/get-weather-data/<date>', methods=['GET'])
 def get_weather_data(date):
     location_input = request.args.get('location')
     if not location_input:
         return jsonify({"error": "Location not provided"}), 400
     try:
-        # Convert the provided date to a datetime object and subtract one day
         original_date = datetime.strptime(date, "%Y-%m-%d")
         previous_date = original_date - timedelta(days=1)
         previous_date_str = previous_date.strftime("%Y-%m-%d")
-
         url = f"https://api.weatherapi.com/v1/history.json?key={API_KEY}&q={location_input}&dt={previous_date_str}"
         response = requests.get(url)
         if response.status_code != 200:
@@ -431,6 +292,89 @@ def get_weather_data(date):
     except Exception as e:
         print(f"Error fetching weather data: {e}")
         return jsonify({"error": str(e)}), 500
+
+# -------------------------------
+# Home route (with form) and view route
+# -------------------------------
+@app.route('/', methods=['GET', 'POST'])
+def home():
+    if request.method == 'POST':
+        pandora = request.form.get('pandora_number')
+        if not pandora or not re.match(r'^\d{3}$', pandora):
+            return "Invalid Pandora number. Please enter a 3-digit number.", 400
+        return render_template_string(HTML_TEMPLATE, pandora_number=pandora, folder=request.form.get('folder'), location=request.form.get('location'))
+    return """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SciGlob NOps app</title>
+  <style>
+    /* Reset some default browser styles */
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body { background-color: #000; overflow: hidden; font-family: sans-serif; }
+    /* Container to center everything */
+    .container { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; }
+    /* Animated background lights */
+    .background-light { position: absolute; width: 400px; height: 400px; opacity: 0.3; filter: blur(120px); }
+    .light1 { background: #A855F7; animation: moveLight 8s infinite alternate ease-in-out; left: 0; top: 0; }
+    .light2 { background: #F472B6; animation: moveLight2 10s infinite alternate ease-in-out; right: 0; bottom: 0; }
+    @keyframes moveLight { 0%, 100% { transform: translate(-50%, -50%); } 50% { transform: translate(50%, 50%); } }
+    @keyframes moveLight2 { 0%, 100% { transform: translate(50%, 50%); } 50% { transform: translate(-50%, -50%); } }
+    /* Frosted glass input field styles */
+    .input-field { position: relative; width: 320px; padding: 12px 16px; font-size: 16px; color: #fff;
+                   background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+                   border-radius: 8px; backdrop-filter: blur(10px); outline: none; transition: transform 0.3s ease-out;
+                   margin-bottom: 10px; }
+    /* Frosted glass button styles */
+    .submit-button { padding: 10px 20px; font-size: 16px; color: #fff; background: rgba(255, 255, 255, 0.2);
+                     border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 8px; backdrop-filter: blur(10px);
+                     cursor: pointer; transition: background 0.3s ease-out; }
+    .submit-button:hover { background: rgba(255, 255, 255, 0.3); }
+    /* When focused (after animation) */
+    .focused { transform: translateY(-12px); }
+    /* Animation for the initial focus effect */
+    .animate-rise { animation: rise 0.5s ease-out forwards; }
+    @keyframes rise { 0% { transform: translateY(0); } 40% { transform: translateY(-16px); } 100% { transform: translateY(-12px); } }
+    /* Placeholder style */
+    ::placeholder { color: #ccc; }
+    label { color: white; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="background-light light1"></div>
+    <div class="background-light light2"></div>
+    <div style="text-align: center; margin-bottom: 380px;">
+      <img src="static/asset/sciglob.png" style="max-width: 1200px; height: auto;">
+    </div>
+   <form action="/view" method="post" style="font-size: 28px;"> 
+    <label for="pandora_number">Enter Pandora Number (3 digits):</label><br>
+    <input type="text" id="pandora_number" name="pandora_number" placeholder="e.g., 123" required pattern="\\d{3}" style="font-size: 28px;"><br><br>
+    <label for="location">Enter Location:</label><br>
+    <input type="text" id="location" name="location" placeholder="e.g., City, Country" required style="font-size: 28px;"><br><br>
+    <button type="submit" name="folder" value="diagnostic" style="font-size: 28px;">View Diagnostics</button>
+    <button type="submit" name="folder" value="figures" style="font-size: 28px;">View Figures</button>
+</form>
+  </div>
+  <script>
+    const input = document.getElementById("glassInput");
+    input.addEventListener("focus", function () { input.classList.add("animate-rise"); });
+    input.addEventListener("animationend", function (e) { if (e.animationName === "rise") { input.classList.remove("animate-rise"); input.classList.add("focused"); } });
+    input.addEventListener("blur", function () { input.classList.remove("focused"); });
+  </script>
+</body>
+</html>
+    """
+
+@app.route('/view', methods=['POST'])
+def view():
+    pandora = request.form['pandora_number']
+    folder = request.form['folder']
+    location = request.form['location']
+    return render_template_string(HTML_TEMPLATE, pandora_number=pandora, folder=folder, location=location)
 
 if __name__ == '__main__':
     app.run(debug=True)
