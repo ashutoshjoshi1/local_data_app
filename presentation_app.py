@@ -15,6 +15,49 @@ storage_client = storage.Client.from_service_account_json(GCP_CREDENTIALS_PATH)
 bucket = storage_client.bucket(BUCKET_NAME)
 
 # -------------------------------
+# Helper function to get device status from status.txt
+# -------------------------------
+def get_status(pandora):
+    """Fetch the status.txt from the bucket under Pan{pandora}/status.txt and extract the date.
+    The expected file content is like:
+      Pandora2s1_GreenbeltMD_20250327_L0_part50.txt
+    If the file is not present, returns ('grey', 'Not Sure').
+    Otherwise, it determines the status based on the extracted date:
+      - Green: if the extracted date is today or yesterday.
+      - Yellow: if the extracted date is within the last 7 days.
+      - Red: if the extracted date is older than 7 days.
+    """
+    blob_name = f"Pan{pandora}/status.txt"
+    blob = bucket.blob(blob_name)
+    try:
+        status_line = blob.download_as_text().strip()
+    except Exception as e:
+        print(f"Error reading status.txt: {e}")
+        return ("grey", "Not Sure")
+    
+    # Extract date from a line like: Pandora2s1_GreenbeltMD_20250327_L0_part50.txt
+    match = re.search(r"_(\d{8})_", status_line)
+    if match:
+        date_str = match.group(1)
+        try:
+            file_date = datetime.strptime(date_str, "%Y%m%d").date()
+        except Exception as e:
+            print(f"Error parsing date from status.txt: {e}")
+            return ("grey", "Not Sure")
+    else:
+        return ("grey", "Not Sure")
+    
+    today = datetime.today().date()
+    diff = (today - file_date).days
+    if diff <= 1:
+        return ("green", "The device is working fine. All files are generated perfectly.")
+    elif diff <= 7:
+        return ("yellow", "Check the device in teamviewer. There might be some error.")
+    else:
+        return ("red", "Please check the device ASAP. It is now generating L0 files. Maybe the application is stopped.")
+
+
+# -------------------------------
 # HTML Template for the view route
 # -------------------------------
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -47,7 +90,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
 <body>
-  <h1>{{ folder.capitalize() }} for Pandora {{ pandora_number }}</h1>
+  <h1>
+    {{ folder.capitalize() }} for Pandora {{ pandora_number }}
+    <span style="color: {{ status_color }};">({{ status_message }})</span>
+  </h1>
   <div id="content"></div>
   <!-- Zoomed Image Container -->
   <div id="zoomed-image">
@@ -70,7 +116,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                               .sort((a, b) => new Date(b) - new Date(a))
                               .slice(0, 10);
         sortedDates.forEach(date => {
-          // Format the date for display
           const formattedDate = new Date(date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
           // Create container for the date
           const dateContainer = document.createElement('div');
@@ -94,7 +139,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           dateContainer.appendChild(chartDiv);
           content.appendChild(dateContainer);
           
-          // Fetch weather data for this date and render chart in chartDiv
+          // Fetch weather data for this date and render chart in chartDiv.
+          // Weather data is fetched for one day before the image date.
           fetch(`/get-weather-data/${date}?location={{ location }}`)
             .then(response => response.json())
             .then(weatherData => {
@@ -102,10 +148,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 console.error("Weather API Error:", weatherData.error);
                 return;
               }
-              // Extract times (only time part) and conditions
               const times = weatherData.map(entry => entry.time.split(" ")[1]);
               const conditions = weatherData.map(entry => entry.condition);
-              // Mapping weather conditions to emojis
               const weatherIcons = {
                 "Sunny": "☀️",
                 "Clear": "🌤️",
@@ -142,14 +186,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                   legendContainer.appendChild(legendItem);
                 });
               }
-              // Run legend creation only once
               if (!document.getElementById("weather-legend") || !document.getElementById("weather-legend").hasChildNodes()) {
                 const weatherLegend = document.createElement("div");
                 weatherLegend.id = "weather-legend";
                 document.body.appendChild(weatherLegend);
                 createLegend();
               }
-              // Map conditions to emojis (or fallback to condition text)
               const conditionsWithIcons = conditions.map(cond => {
                 let trimmed = cond.trim();
                 return weatherIcons[trimmed] || trimmed;
@@ -180,7 +222,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       })
       .catch(error => console.error("Error fetching files:", error));
       
-    // Image zoom functionality
     let currentIndex = 0;
     function zoomImage(index) {
       currentIndex = index;
@@ -280,17 +321,15 @@ def get_weather_data(date):
     if not location_input:
         return jsonify({"error": "Location not provided"}), 400
     try:
-        # Parse the provided date and subtract one day
+        # Subtract one day from the provided date
         original_date = datetime.strptime(date, "%Y-%m-%d")
         previous_date = original_date - timedelta(days=1)
         previous_date_str = previous_date.strftime("%Y-%m-%d")
         
-        # Fetch weather data for the previous day
         url = f"https://api.weatherapi.com/v1/history.json?key={API_KEY}&q={location_input}&dt={previous_date_str}"
         response = requests.get(url)
         if response.status_code != 200:
             return jsonify({"error": f"Failed to fetch weather data: {response.text}"}), 500
-        
         data = response.json()
         weather_data = []
         for hour in data.get('forecast', {}).get('forecastday', [{}])[0].get('hour', []):
@@ -303,7 +342,6 @@ def get_weather_data(date):
         print(f"Error fetching weather data: {e}")
         return jsonify({"error": str(e)}), 500
 
-
 # -------------------------------
 # Home route (with form) and view route
 # -------------------------------
@@ -313,7 +351,14 @@ def home():
         pandora = request.form.get('pandora_number')
         if not pandora or not re.match(r'^\d{3}$', pandora):
             return "Invalid Pandora number. Please enter a 3-digit number.", 400
-        return render_template_string(HTML_TEMPLATE, pandora_number=pandora, folder=request.form.get('folder'), location=request.form.get('location'))
+        # Get device status (color and message) from status.txt in the bucket
+        status_color, status_message = get_status(pandora)
+        return render_template_string(HTML_TEMPLATE,
+                                      pandora_number=pandora,
+                                      folder=request.form.get('folder'),
+                                      location=request.form.get('location'),
+                                      status_color=status_color,
+                                      status_message=status_message)
     return """
 <!DOCTYPE html>
 <html lang="en">
@@ -371,13 +416,6 @@ def home():
 </body>
 </html>
     """
-
-@app.route('/view', methods=['POST'])
-def view():
-    pandora = request.form['pandora_number']
-    folder = request.form['folder']
-    location = request.form['location']
-    return render_template_string(HTML_TEMPLATE, pandora_number=pandora, folder=folder, location=location)
 
 if __name__ == '__main__':
     app.run(debug=True)
