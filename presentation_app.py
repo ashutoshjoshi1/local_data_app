@@ -345,13 +345,19 @@ def get_weather_data(date):
 @app.route('/', methods=['GET', 'POST'])
 def home():
     if request.method == 'POST':
-        pandora = request.form.get('pandora_number')
-        if not pandora or not re.match(r'^\d{3}$', pandora):
-            return "Invalid Pandora number. Please enter a 3-digit number.", 400
+        # Expecting the drop-down selection to be in the form "pandora" with value "XXX|Location"
+        pandora_full = request.form.get('pandora')
+        if not pandora_full:
+            return "No pandora selected.", 400
+        parts = pandora_full.split('|')
+        if len(parts) != 2:
+            return "Invalid pandora selection.", 400
+        pandora = parts[0]
+        location = parts[1]
         return render_template_string(HTML_TEMPLATE,
                                       pandora_number=pandora,
                                       folder=request.form.get('folder'),
-                                      location=request.form.get('location'),
+                                      location=location,
                                       **dict(zip(["status_color", "status_message"], get_status(pandora))))
     return """
 <!DOCTYPE html>
@@ -392,21 +398,42 @@ def home():
     <div style="text-align: center; margin-bottom: 380px;">
       <img src="static/asset/sciglob.png" style="max-width: 1200px; height: auto;">
     </div>
-   <!-- Changed form action from /view to / -->
    <form action="/" method="post" style="font-size: 28px;"> 
-    <label for="pandora_number">Enter Pandora Number (3 digits):</label><br>
-    <input type="text" id="pandora_number" name="pandora_number" placeholder="e.g., 123" required pattern="\\d{3}" style="font-size: 28px;"><br><br>
-    <label for="location">Enter Location:</label><br>
-    <input type="text" id="location" name="location" placeholder="e.g., City, Country" required style="font-size: 28px;"><br><br>
+    <label for="pandora">Select Pandora:</label><br>
+    <select name="pandora" id="pandora" style="font-size: 28px;">
+      <option value="002|Greenbelt MD">002 - Greenbelt MD</option>
+      <option value="032|Greenbelt MD">032 - Greenbelt MD</option>
+      <option value="071|Greenbelt MD">071 - Greenbelt MD</option>
+      <option value="057|Greenbelt MD">057 - Greenbelt MD</option>
+      <option value="059|Greenbelt MD">059 - Greenbelt MD</option>
+      <option value="079|Greenbelt MD">079 - Greenbelt MD</option>
+      <option value="085|Greenbelt MD">085 - Greenbelt MD</option>
+      <option value="157|Greenbelt MD">157 - Greenbelt MD</option>
+      <option value="025|Houston TX">025 - Houston TX</option>
+      <option value="040|Wallops island">040 - Wallops island</option>
+      <option value="061|Aldine TX">061 - Aldine TX</option>
+      <option value="081|Stockton IL">081 - Stockton IL</option>
+      <option value="083|Bondville IL">083 - Bondville IL</option>
+      <option value="087|Lapwai ID">087 - Lapwai ID</option>
+      <option value="088|San Antonio TX">088 - UT San Antonio TX</option>
+      <option value="143|Liberty TX">143 - Liberty TX</option>
+      <option value="158|Atlanta GA">158 - Atlanta GA Conyers</option>
+      <option value="173|Atlanta GA">173 - Atlanta GATech</option>
+      <option value="204|Boulder CO">204 - Boulder CO NCAR</option>
+      <option value="237|Atlant GA">237 - Atlant GA SouthDeKalb</option>
+    </select>
+    <br><br>
     <button type="submit" name="folder" value="diagnostic" style="font-size: 28px;">View Diagnostics</button>
     <button type="submit" name="folder" value="figures" style="font-size: 28px;">View Figures</button>
-</form>
+   </form>
   </div>
   <script>
     const input = document.getElementById("glassInput");
-    input.addEventListener("focus", function () { input.classList.add("animate-rise"); });
-    input.addEventListener("animationend", function (e) { if (e.animationName === "rise") { input.classList.remove("animate-rise"); input.classList.add("focused"); } });
-    input.addEventListener("blur", function () { input.classList.remove("focused"); });
+    if (input) {
+      input.addEventListener("focus", function () { input.classList.add("animate-rise"); });
+      input.addEventListener("animationend", function (e) { if (e.animationName === "rise") { input.classList.remove("animate-rise"); input.classList.add("focused"); } });
+      input.addEventListener("blur", function () { input.classList.remove("focused"); });
+    }
   </script>
 </body>
 </html>
